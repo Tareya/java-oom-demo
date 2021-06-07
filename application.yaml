@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: eureka-client-oom-demo
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka.turboradio.cn/eureka
+
+  instance:
+    prefer-ip-address: true  #以IP注册进eureka,不以ID注册
+    instance-id: ${spring.cloud.client.ip-address}:${server.port}

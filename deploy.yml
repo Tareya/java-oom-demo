@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-client-demo
+  namespace: release-java
+  labels:
+    app: eureka-client-demo
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 50%
+      maxUnavailable: 50%
+  selector:
+    matchLabels:
+      app: eureka-client-demo
+  template:
+    metadata:
+      labels:
+        app: eureka-client-demo
+    spec:
+      imagePullSecrets:
+        - name: harborsecret
+      terminationGracePeriodSeconds: 90
+      containers:
+      - name: eureka-client-demo
+        image: registry.cn-hangzhou.aliyuncs.com/uniondrug-centos/eureka-client-demo:v2
+        imagePullPolicy: Always
+        command: 
+          - java
+        args: 
+          - "-Xms1024m"
+          - "-Xmx1024m"
+          - "-Xss512k"
+          - "-XX:+UnlockExperimentalVMOptions"
+          - "-XX:+UseCGroupMemoryLimitForHeap"
+          - "-XX:MetaspaceSize=512m"
+          - "-XX:MaxMetaspaceSize=512m"
+          - "-XX:+HeapDumpOnOutOfMemoryError"
+          - "-XX:+ExitOnOutOfMemoryError"
+          - "-XX:HeapDumpPath=/data/apps/eureka-client-demo/log/java_heapdump.hprof"
+          - "-XX:OnOutOfMemoryError=/data/apps/eureka-client-demo/dump-handler -k ${HOSTNAME} -e ${SPRING_PROFILES_ACTIVE}"
+          - "-Duser.timezone=GMT+8"
+          - "-Djava.security.egd=file:/dev/./urandom"
+          - "-Dprofile.active=${SPRING_PROFILES_ACTIVE}"
+          - "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE}"
+          - "-jar"
+          - "eureka-client-demo.jar"
+          - "--server.port=8880"
+        ports:
+        - containerPort: 8880
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: release
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "1200Mi"
+            cpu: "500m"
+        livenessProbe:
+            httpGet:
+              port: 8880
+              path: /actuator/health
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 8880
+          initialDelaySeconds: 30
+          timeoutSeconds: 2
+          periodSeconds: 10   
+        volumeMounts:
+            - mountPath: /data/apps/eureka-client-demo/log
+              name: eureka-client-demo
+              readOnly: false
+      
+      volumes:
+      - name: eureka-client-demo
+        hostPath:
+          path: /tmp
+          type: Directory
+
+
+---  
+apiVersion: v1
+kind: Service
+metadata:
+  name: eureka-client-demo
+  namespace: release-java
+spec:
+  type: NodePort
+  ports:
+  - port: 8880
+    protocol: TCP
+    targetPort: 8880
+  selector:
+    app: eureka-client-demo
+
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress 
+metadata:
+  name: eureka-client-demo
+  namespace: release-java
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+spec:
+  rules:
+  - host: eureka-client-demo.uniondrug.net
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: eureka-client-demo
+          servicePort: 8880
+
